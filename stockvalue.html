@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="sv" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Börsvärdering Dashboard - USA & Stockholm</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#131e32',
+                            900: '#0f172a',
+                            950: '#080d1a',
+                        },
+                        val: {
+                            cheap: '#10b981',    /* Emerald 500 */
+                            fair: '#f59e0b',     /* Amber 500 */
+                            expensive: '#ef4444',/* Red 500 */
+                            extreme: '#dc2626'   /* Red 600 */
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #080d1a;
+            color: #f8fafc;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        .gauge-meter {
+            transition: all 0.5s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between custom-scrollbar">
+
+    <!-- Navigation / Header -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2.5 bg-blue-600/20 text-blue-400 rounded-xl border border-blue-500/30">
+                    <i class="fa-solid fa-chart-line text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+                        Börsvärderingskompassen
+                    </h1>
+                    <p class="text-xs text-slate-400">Analys & värderingsindikatorer för USA & Stockholmsbörsen</p>
+                </div>
+            </div>
+
+            <!-- View Switcher Tabs -->
+            <div class="bg-slate-950 p-1 rounded-xl border border-slate-800 flex items-center space-x-1 text-sm font-medium">
+                <button id="tab-us" onclick="switchMarket('us')" class="px-4 py-2 rounded-lg transition-all flex items-center gap-2 bg-blue-600 text-white shadow-lg shadow-blue-600/30">
+                    <span>🇺🇸</span> USA (S&P 500)
+                </button>
+                <button id="tab-se" onclick="switchMarket('se')" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white transition-all flex items-center gap-2">
+                    <span>🇸🇪</span> Sverige (OMXS30)
+                </button>
+                <button id="tab-compare" onclick="switchMarket('compare')" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-columns text-xs"></i> Jämförelse
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+
+        <!-- Master Valuation Bar / Overall Gauge -->
+        <section class="mb-8 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <div class="absolute -right-10 -top-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span id="market-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            USA-börsen (S&P 500)
+                        </span>
+                        <span class="text-xs text-slate-400"><i class="fa-regular fa-clock mr-1"></i>Uppdaterad: Q1 2026</span>
+                    </div>
+                    <h2 class="text-2xl font-bold mt-1" id="master-title">Övergripande Värderingsbild</h2>
+                    <p class="text-sm text-slate-400 mt-1 max-w-2xl" id="master-desc">
+                        Sammanvägd bedömning baserad på alla sex nyckelindikatorer i förhållande till sina historiska snitt.
+                    </p>
+                </div>
+
+                <div class="text-right flex flex-col items-start md:items-end">
+                    <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Sammanvägd Status</div>
+                    <div id="overall-status-text" class="text-2xl font-extrabold text-amber-400 flex items-center gap-2 mt-0.5">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Måttligt Hög Värdering
+                    </div>
+                    <div id="overall-score-text" class="text-xs text-slate-400 mt-1">
+                        Aggregerat index: <span class="text-slate-200 font-semibold">74 / 100</span> (Hög risk)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Master Gauge Visual Slider -->
+            <div class="space-y-2">
+                <div class="h-4 w-full bg-slate-950 rounded-full p-0.5 border border-slate-800 flex relative overflow-hidden">
+                    <div class="w-1/4 h-full bg-emerald-500/80 rounded-l-full" title="Undervärderad (0-25)"></div>
+                    <div class="w-1/4 h-full bg-blue-500/80" title="Fair Value (25-50)"></div>
+                    <div class="w-1/4 h-full bg-amber-500/80" title="Högt Värderad (50-75)"></div>
+                    <div class="w-1/4 h-full bg-red-600/80 rounded-r-full" title="Extremt Hög Värdering (75-100)"></div>
+                    
+                    <!-- Indicator Needle -->
+                    <div id="gauge-needle" class="absolute top-0 bottom-0 w-2.5 bg-white shadow-lg rounded-full transform -translate-x-1/2 border border-slate-900 gauge-meter" style="left: 74%;"></div>
+                </div>
+                <div class="flex justify-between text-xs text-slate-400 font-medium px-1">
+                    <span class="text-emerald-400">Undervärderad</span>
+                    <span class="text-blue-400">Fair Value</span>
+                    <span class="text-amber-400">Måttligt Hög</span>
+                    <span class="text-red-400">Extremt Hög</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dynamic Indicator Grid View (Single Market View) -->
+        <div id="single-market-view" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Indicator Cards will be rendered dynamically by JS -->
+        </div>
+
+        <!-- Comparative Table View (Visible only when 'compare' tab is selected) -->
+        <div id="compare-view" class="hidden space-y-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl overflow-x-auto">
+                <h3 class="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-code-compare text-blue-400"></i> Sida-vid-Sida Jämförelse: USA vs Sverige
+                </h3>
+                <table class="w-full text-left border-collapse min-w-[650px]">
+                    <thead>
+                        <tr class="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                            <th class="py-3 px-4">Indikator</th>
+                            <th class="py-3 px-4">🇺🇸 USA (S&P 500)</th>
+                            <th class="py-3 px-4">🇸🇪 Sverige (OMXS30)</th>
+                            <th class="py-3 px-4">Historiskt Snitt</th>
+                            <th class="py-3 px-4">Relativ Värdering</th>
+                        </tr>
+                    </thead>
+                    <tbody id="compare-table-body" class="divide-y divide-slate-800/60 text-sm">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Interactive Macro & Valuation Simulator Section -->
+        <section class="mt-12 bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl">
+            <div class="max-w-3xl mb-6">
+                <h3 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-emerald-400"></i> Interaktiv Ränte- & Vinstsimulator
+                </h3>
+                <p class="text-sm text-slate-400 mt-1">
+                    Testa hur förändringar i statsobligationsräntor och bolagsvinster påverkar Equity Risk Premium (ERP) och P/E-relationen i realtid.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+                <div class="space-y-6 bg-slate-950 p-6 rounded-xl border border-slate-800/80">
+                    <!-- Slider 1: Interest Rate -->
+                    <div>
+                        <div class="flex justify-between text-sm mb-2 font-medium">
+                            <label for="sim-rate" class="text-slate-300">10-årig Statsobligation</label>
+                            <span id="sim-rate-val" class="text-blue-400 font-bold">4.20 %</span>
+                        </div>
+                        <input type="range" id="sim-rate" min="1.0" max="8.0" step="0.1" value="4.2" 
+                               class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500" 
+                               oninput="updateSimulation()">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1">
+                            <span>1.0%</span>
+                            <span>4.0%</span>
+                            <span>8.0%</span>
+                        </div>
+                    </div>
+
+                    <!-- Slider 2: Earnings Growth / Yield -->
+                    <div>
+                        <div class="flex justify-between text-sm mb-2 font-medium">
+                            <label for="sim-eyield" class="text-slate-300">Börsens Vinstavkastning (E/P)</label>
+                            <span id="sim-eyield-val" class="text-emerald-400 font-bold">4.76 % (P/E 21)</span>
+                        </div>
+                        <input type="range" id="sim-eyield" min="2.5" max="10.0" step="0.1" value="4.76" 
+                               class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500" 
+                               oninput="updateSimulation()">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1">
+                            <span>2.5% (P/E 40)</span>
+                            <span>5.0% (P/E 20)</span>
+                            <span>10% (P/E 10)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simulation Output Panel -->
+                <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="bg-slate-950/60 p-5 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs text-slate-400 font-semibold uppercase">Beräknad Equity Risk Premium</span>
+                            <div id="sim-erp-result" class="text-3xl font-extrabold text-amber-400 mt-1">0.56%</div>
+                            <p id="sim-erp-eval" class="text-xs text-slate-400 mt-2">
+                                Låg riskpremie. Obligationer ger ett starkt alternativ till aktier.
+                            </p>
+                        </div>
+                        <div class="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-400">
+                            Riktmärke ERP: > 3.0% är attraktivt
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950/60 p-5 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs text-slate-400 font-semibold uppercase">Implicerad Marknadssignatur</span>
+                            <div id="sim-status-result" class="text-2xl font-bold text-red-400 mt-1">Dyr / Hög Risk</div>
+                            <p id="sim-desc-result" class="text-xs text-slate-400 mt-2">
+                                Med nuvarande inställningar är aktiemarknaden underkompenserad för den risk man tar jämfört med den riskfria räntan.
+                            </p>
+                        </div>
+                        <div class="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-400">
+                            Modell: Fed Model / ERP Spread
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Educational & Methodology Guide -->
+        <section class="mt-12 bg-slate-900/50 border border-slate-800 rounded-2xl p-6 md:p-8">
+            <h3 class="text-lg font-bold text-slate-200 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-graduation-cap text-indigo-400"></i> Metod & Pedagogisk Guide: Hur tolkar man helheten?
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-slate-300">
+                <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-800/80">
+                    <h4 class="font-semibold text-indigo-300 mb-2 flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-xs">1</span>
+                        Inget enskilt mått räcker
+                    </h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        Att enbart titta på P/E-talet kan vara missvisande under cykeltoppar. Kombinera cykliskt justerade mått (CAPE) med balansräkningsmått (P/B) och makroindikatorer (Buffett-indikatorn) för en fullständig bild.
+                    </p>
+                </div>
+                <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-800/80">
+                    <h4 class="font-semibold text-indigo-300 mb-2 flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-xs">2</span>
+                        Räntans avgörande roll
+                    </h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        Högre värderingsmultiplar kan motiveras under lågränteregimer. När statsobligationsräntan stiger höjs avkastningskravet, vilket sätter press nedåt på vad investerare bör betala per vinstkrona (ERP).
+                    </p>
+                </div>
+                <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-800/80">
+                    <h4 class="font-semibold text-indigo-300 mb-2 flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-xs">3</span>
+                        Strukturella skillnader
+                    </h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        USA-börsen (S&P 500) har en hög andel snabbväxande techbolag med höga marginaler, vilket historiskt motiverar högre P/E och P/B än Stockholmsbörsen som har mer cyklisk industri och bank.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 bg-slate-950 py-6 mt-12 text-center text-xs text-slate-400">
+        <div class="max-w-7xl mx-auto px-4">
+            <p>Börsvärderingskompassen | Utbildningsverktyg för finansiell analys. Data är baserad på uppskattade marknadsvärden och historiska snitt.</p>
+            <p class="mt-1 text-slate-400">Observera att historisk avkastning inte är någon garanti för framtida resultat. Investeringar innebär alltid en risk.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Data Repository for US and Sweden valuation metrics
+        const marketData = {
+            us: {
+                name: "USA (S&P 500)",
+                badge: "USA-börsen (S&P 500)",
+                overallStatus: "Måttligt Hög Värdering",
+                overallScore: 78, // 0-100 scale (higher = more expensive/risky)
+                statusClass: "text-amber-400",
+                indicators: [
+                    {
+                        id: "buffett",
+                        name: "Buffett-indikatorn",
+                        subtitle: "Börsvärde / BNP",
+                        value: "195%",
+                        histAvg: "120%",
+                        range: "75% - 200%+",
+                        status: "Extremt Hög",
+                        statusLevel: "extreme", // cheap, fair, expensive, extreme
+                        score: 92,
+                        desc: "Mäter totala börsvärdet för alla noterade aktier i förhållande till landets BNP. Warren Buffett kallade detta för 'det enskilt bästa måttet på värderingen vid varje givet ögonblick'.",
+                        details: "Nivåer över 150% indikerar historiskt att marknaden är starkt övervärderad i förhållande till den underliggande ekonomins storlek. Den höga nivån i USA förklaras delvis av stor global omsättning i amerikanska bolag."
+                    },
+                    {
+                        id: "shiller_pe",
+                        name: "Shiller P/E (CAPE)",
+                        subtitle: "Cykliskt justerat P/E-tal",
+                        value: "35.2x",
+                        histAvg: "21.0x",
+                        range: "15x - 38x",
+                        status: "Högt Värderad",
+                        statusLevel: "expensive",
+                        score: 82,
+                        desc: "Pris i förhållande till det genomsnittliga inflationjusterade resultatet de senaste 10 åren. Jämnar ut konjunktursvängningar.",
+                        details: "Dagens nivå på ~35x ligger avsevärt över det historiska genomsnittet på 21x. Endast under IT-bubblan (1999-2000) och toppen 2021 har CAPE varit högre i USA."
+                    },
+                    {
+                        id: "forward_pe",
+                        name: "Framåtblickande P/E",
+                        subtitle: "Pris / Förväntad vinst (NTM)",
+                        value: "21.8x",
+                        histAvg: "16.8x",
+                        range: "12x - 24x",
+                        status: "Måttligt Hög",
+                        statusLevel: "expensive",
+                        score: 72,
+                        desc: "Marknadspris dividerat med de förväntade vinsterna under de kommande 12 månaderna.",
+                        details: "Ett framåtblickande P/E på nära 22 kräver fortsatt stark vinsttillväxt, särskilt från de stora teknikbolagen ('Magnificent 7') som utgör en betydande del av indexet."
+                    },
+                    {
+                        id: "pb_ratio",
+                        name: "P/B-tal (Price-to-Book)",
+                        subtitle: "Pris / Eget Kapital",
+                        value: "4.8x",
+                        histAvg: "3.2x",
+                        range: "2.0x - 5.1x",
+                        status: "Högt Värderad",
+                        statusLevel: "expensive",
+                        score: 80,
+                        desc: "Jämför bolagens marknadsvärde med deras bokförda egna kapital.",
+                        details: "Ett högt P/B-tal återspeglar att amerikanska bolag har högt kapitaleffektivitet och hög avkastning på eget kapital (ROE), men lämnar lite marginal för skuffelser."
+                    },
+                    {
+                        id: "div_yield",
+                        name: "Direktavkastning",
+                        subtitle: "Utdelning / Börsvärde",
+                        value: "1.30%",
+                        histAvg: "1.90%",
+                        range: "1.2% - 3.5%",
+                        status: "Låg (Hög risk)",
+                        statusLevel: "expensive",
+                        score: 75,
+                        desc: "Den årliga direktavkastningen i form av utdelningar från indexets bolag.",
+                        details: "En låg direktavkastning tyder på att investerare förlitar sig nästan helt på kursuppgång och aktieåterköp snarare än kontanta utdelningar."
+                    },
+                    {
+                        id: "erp",
+                        name: "Equity Risk Premium (ERP)",
+                        subtitle: "Aktieriskpremie vs 10-årig ränta",
+                        value: "0.56%",
+                        histAvg: "3.50%",
+                        range: "0.2% - 5.5%",
+                        status: "Extremt Låg",
+                        statusLevel: "extreme",
+                        score: 90,
+                        desc: "Extraavkastningen investerare kräver för att äga aktier istället för riskfria statsobligationer (Vinstavkastning - 10-årig ränta).",
+                        details: "Med en 10-årig statsobligationsränta kring 4.2% och en vinstavkastning (1/PE) på 4.76% är premie för aktierisk historiskt mycket låg. Obligationer ger en stark konkurrens."
+                    }
+                ]
+            },
+            se: {
+                name: "Sverige (OMXS30 / OMXSPI)",
+                badge: "Stockholmsbörsen (OMXS30)",
+                overallStatus: "Nära Fair Value / Måttlig Risk",
+                overallScore: 52,
+                statusClass: "text-blue-400",
+                indicators: [
+                    {
+                        id: "buffett",
+                        name: "Buffett-indikatorn",
+                        subtitle: "Börsvärde / BNP",
+                        value: "145%",
+                        histAvg: "125%",
+                        range: "80% - 170%",
+                        status: "Måttligt Hög",
+                        statusLevel: "fair",
+                        score: 60,
+                        desc: "Totalt börsvärde på Stockholmsbörsen jämfört med Sveriges BNP.",
+                        details: "Sveriges ekonomi är mycket exportberoende och många noterade bolag har majoriteten av sin försäljning utomlands, vilket gör att kvotdelen naturligt ligger högre än 100% utan att det nödvändigtvis innebär extrem övervärdering."
+                    },
+                    {
+                        id: "shiller_pe",
+                        name: "Shiller P/E (CAPE)",
+                        subtitle: "Cykliskt justerat P/E-tal",
+                        value: "22.5x",
+                        histAvg: "19.5x",
+                        range: "13x - 28x",
+                        status: "Neutral / Fair Value",
+                        statusLevel: "fair",
+                        score: 52,
+                        desc: "Aktiepris i förhållande till 10 års genomsnittliga reala vinster för svenska bolag.",
+                        details: "Stockholmsbörsens CAPE är betydligt mer dämpad än USA:s, vilket återspeglar en högre andel industri- och bankaktier med mer måttliga värderingsmultiplar."
+                    },
+                    {
+                        id: "forward_pe",
+                        name: "Framåtblickande P/E",
+                        subtitle: "Pris / Förväntad vinst (NTM)",
+                        value: "15.8x",
+                        histAvg: "15.0x",
+                        range: "11x - 20x",
+                        status: "Fair Value",
+                        statusLevel: "cheap",
+                        score: 45,
+                        desc: "Förväntat P/E-tal baserat på analytikernas vinstprognoser för det kommande året.",
+                        details: "Värderingen på Stockholmsbörsen är nära sitt historiska snitt, vilket ger ett mer rimligt utgångsläge för långsiktiga investerare."
+                    },
+                    {
+                        id: "pb_ratio",
+                        name: "P/B-tal (Price-to-Book)",
+                        subtitle: "Pris / Eget Kapital",
+                        value: "2.2x",
+                        histAvg: "2.1x",
+                        range: "1.4x - 2.8x",
+                        status: "Fair Value",
+                        statusLevel: "cheap",
+                        score: 48,
+                        desc: "Priset på börsen ställt mot bolagens bokförda tillgångar minus skulder.",
+                        details: "Svenska storbolag och verkstadsjättar handlas nära historiska snittnivåer i förhållande till balansräkningarna."
+                    },
+                    {
+                        id: "div_yield",
+                        name: "Direktavkastning",
+                        subtitle: "Utdelning / Börsvärde",
+                        value: "3.60%",
+                        histAvg: "3.50%",
+                        range: "2.5% - 4.8%",
+                        status: "Attraktiv / Låg risk",
+                        statusLevel: "cheap",
+                        score: 35,
+                        desc: "Genomsnittlig utdelningsandel för Stockholmsbörsen.",
+                        details: "Stockholmsbörsen erbjuder en stark direktavkastning jämfört med globala index, drivet av banker och mogna industribolag."
+                    },
+                    {
+                        id: "erp",
+                        name: "Equity Risk Premium (ERP)",
+                        subtitle: "Aktieriskpremie vs 10-årig ränta",
+                        value: "2.13%",
+                        histAvg: "3.20%",
+                        range: "1.0% - 4.5%",
+                        status: "Måttlig Risk",
+                        statusLevel: "fair",
+                        score: 55,
+                        desc: "Svensk vinstavkastning (6.33%) minus den svenska 10-åriga statsobligationsräntan (~2.20%).",
+                        details: "ERP för Sverige är mer hälsosam än i USA tack vare lägre P/E-tal och något lägre svensk långränta, vilket ger aktier en rimligare riskkompensation."
+                    }
+                ]
+            }
+        };
+
+        let currentMarket = 'us';
+
+        function switchMarket(marketKey) {
+            currentMarket = marketKey;
+
+            // Update tab styles
+            document.getElementById('tab-us').className = marketKey === 'us' 
+                ? "px-4 py-2 rounded-lg transition-all flex items-center gap-2 bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                : "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition-all flex items-center gap-2";
+
+            document.getElementById('tab-se').className = marketKey === 'se'
+                ? "px-4 py-2 rounded-lg transition-all flex items-center gap-2 bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                : "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition-all flex items-center gap-2";
+
+            document.getElementById('tab-compare').className = marketKey === 'compare'
+                ? "px-4 py-2 rounded-lg transition-all flex items-center gap-2 bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                : "px-4 py-2 rounded-lg text-slate-400 hover:text-white transition-all flex items-center gap-2";
+
+            const singleView = document.getElementById('single-market-view');
+            const compareView = document.getElementById('compare-view');
+
+            if (marketKey === 'compare') {
+                singleView.classList.add('hidden');
+                compareView.classList.remove('hidden');
+                renderCompareTable();
+                updateMasterHeaderForCompare();
+            } else {
+                singleView.classList.remove('hidden');
+                compareView.classList.add('hidden');
+                renderSingleMarket(marketKey);
+            }
+        }
+
+        function renderSingleMarket(key) {
+            const data = marketData[key];
+
+            // Update Master Banner
+            document.getElementById('market-badge').textContent = data.badge;
+            document.getElementById('overall-status-text').innerHTML = `<i class="fa-solid fa-gauge-high"></i> ${data.overallStatus}`;
+            document.getElementById('overall-status-text').className = `text-2xl font-extrabold flex items-center gap-2 mt-0.5 ${data.statusClass}`;
+            document.getElementById('overall-score-text').innerHTML = `Aggregerat riskindex: <span class="text-slate-200 font-semibold">${data.overallScore} / 100</span>`;
+            
+            // Move needle
+            document.getElementById('gauge-needle').style.left = `${data.overallScore}%`;
+
+            // Render Cards
+            const grid = document.getElementById('single-market-view');
+            grid.innerHTML = '';
+
+            data.indicators.forEach((ind) => {
+                const statusBg = getStatusBadge(ind.statusLevel);
+                
+                const card = document.createElement('div');
+                card.className = "bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-between hover:border-slate-700 transition-all";
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h3 class="font-bold text-slate-100 text-base">${ind.name}</h3>
+                                <p class="text-xs text-slate-400">${ind.subtitle}</p>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold border ${statusBg}">
+                                ${ind.status}
+                            </span>
+                        </div>
+
+                        <div class="my-4">
+                            <div class="flex items-baseline justify-between">
+                                <span class="text-3xl font-extrabold text-white tracking-tight">${ind.value}</span>
+                                <span class="text-xs text-slate-400">Snitt: <strong class="text-slate-300">${ind.histAvg}</strong></span>
+                            </div>
+                            <div class="text-xs text-slate-400 mt-1">Typiskt intervall: ${ind.range}</div>
+                        </div>
+
+                        <!-- Progress indicator bar -->
+                        <div class="w-full bg-slate-950 h-2 rounded-full overflow-hidden my-3 border border-slate-800">
+                            <div class="h-full ${getBarColor(ind.statusLevel)} rounded-full" style="width: ${ind.score}%"></div>
+                        </div>
+
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            ${ind.desc}
+                        </p>
+                    </div>
+
+                    <!-- Expandable details -->
+                    <div class="mt-4 pt-3 border-t border-slate-800/80">
+                        <button onclick="toggleDetails('${ind.id}')" class="text-xs text-blue-400 hover:text-blue-300 flex items-center justify-between w-full font-medium focus:outline-none">
+                            <span id="btn-text-${ind.id}">Visa djupanalys</span>
+                            <i id="btn-icon-${ind.id}" class="fa-solid fa-chevron-down text-xs transition-transform"></i>
+                        </button>
+                        <div id="details-${ind.id}" class="hidden mt-3 text-xs text-slate-400 bg-slate-950/80 p-3 rounded-lg border border-slate-800/60 leading-relaxed">
+                            ${ind.details}
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function renderCompareTable() {
+            const tbody = document.getElementById('compare-table-body');
+            tbody.innerHTML = '';
+
+            const usInds = marketData.us.indicators;
+            const seInds = marketData.se.indicators;
+
+            usInds.forEach((usInd, idx) => {
+                const seInd = seInds[idx];
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/30 transition-colors";
+
+                let relativeText = "";
+                if (usInd.score > seInd.score + 15) {
+                    relativeText = "<span class='text-amber-400 font-medium'>USA avsevärt dyrare</span>";
+                } else if (seInd.score > usInd.score + 15) {
+                    relativeText = "<span class='text-amber-400 font-medium'>Sverige avsevärt dyrare</span>";
+                } else {
+                    relativeText = "<span class='text-slate-400'>Likvärdig relativ nivå</span>";
+                }
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-semibold text-slate-200">
+                        ${usInd.name}
+                        <div class="text-xs text-slate-400 font-normal">${usInd.subtitle}</div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="font-bold text-white">${usInd.value}</span>
+                        <span class="block text-xs ${getStatusTextColor(usInd.statusLevel)}">${usInd.status}</span>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="font-bold text-white">${seInd.value}</span>
+                        <span class="block text-xs ${getStatusTextColor(seInd.statusLevel)}">${seInd.status}</span>
+                    </td>
+                    <td class="py-3 px-4 text-xs text-slate-400">
+                        <div>USA snitt: ${usInd.histAvg}</div>
+                        <div>SWE snitt: ${seInd.histAvg}</div>
+                    </td>
+                    <td class="py-3 px-4 text-xs">
+                        ${relativeText}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateMasterHeaderForCompare() {
+            document.getElementById('market-badge').textContent = "Jämförande Vy";
+            document.getElementById('overall-status-text').innerHTML = `<i class="fa-solid fa-scale-balanced"></i> USA vs Sverige`;
+            document.getElementById('overall-status-text').className = "text-2xl font-extrabold text-blue-400 flex items-center gap-2 mt-0.5";
+            document.getElementById('overall-score-text').innerHTML = `USA Riskindex: <span class="text-amber-400 font-bold">78</span> | Sverige Riskindex: <span class="text-blue-400 font-bold">52</span>`;
+            document.getElementById('gauge-needle').style.left = `65%`;
+        }
+
+        function getStatusBadge(level) {
+            switch(level) {
+                case 'cheap':
+                    return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+                case 'fair':
+                    return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
+                case 'expensive':
+                    return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+                case 'extreme':
+                    return 'bg-red-500/10 text-red-400 border-red-500/30';
+                default:
+                    return 'bg-slate-800 text-slate-300 border-slate-700';
+            }
+        }
+
+        function getBarColor(level) {
+            switch(level) {
+                case 'cheap': return 'bg-emerald-500';
+                case 'fair': return 'bg-blue-500';
+                case 'expensive': return 'bg-amber-500';
+                case 'extreme': return 'bg-red-600';
+                default: return 'bg-slate-500';
+            }
+        }
+
+        function getStatusTextColor(level) {
+            switch(level) {
+                case 'cheap': return 'text-emerald-400';
+                case 'fair': return 'text-blue-400';
+                case 'expensive': return 'text-amber-400';
+                case 'extreme': return 'text-red-400';
+                default: return 'text-slate-400';
+            }
+        }
+
+        function toggleDetails(id) {
+            const el = document.getElementById(`details-${id}`);
+            const btnText = document.getElementById(`btn-text-${id}`);
+            const btnIcon = document.getElementById(`btn-icon-${id}`);
+
+            if (el.classList.contains('hidden')) {
+                el.classList.remove('hidden');
+                btnText.textContent = "Dölj djupanalys";
+                btnIcon.classList.add('rotate-180');
+            } else {
+                el.classList.add('hidden');
+                btnText.textContent = "Visa djupanalys";
+                btnIcon.classList.remove('rotate-180');
+            }
+        }
+
+        function updateSimulation() {
+            const rate = parseFloat(document.getElementById('sim-rate').value);
+            const eyield = parseFloat(document.getElementById('sim-eyield').value);
+
+            // Update UI Labels
+            document.getElementById('sim-rate-val').textContent = `${rate.toFixed(2)} %`;
+            const peEquivalent = (100 / eyield).toFixed(1);
+            document.getElementById('sim-eyield-val').textContent = `${eyield.toFixed(2)} % (P/E ${peEquivalent})`;
+
+            // ERP Calculation
+            const erp = eyield - rate;
+            const erpEl = document.getElementById('sim-erp-result');
+            erpEl.textContent = `${erp.toFixed(2)}%`;
+
+            const statusEl = document.getElementById('sim-status-result');
+            const descEl = document.getElementById('sim-desc-result');
+            const evalEl = document.getElementById('sim-erp-eval');
+
+            if (erp < 0.5) {
+                erpEl.className = "text-3xl font-extrabold text-red-500 mt-1";
+                statusEl.textContent = "Extremt Hög Risk / Dyr";
+                statusEl.className = "text-2xl font-bold text-red-500 mt-1";
+                descEl.textContent = "Riskpremien är nästintill obefintlig. Obligationsräntan är för hög i förhållande till börsens vinstavkastning.";
+                evalEl.textContent = "Investerare får obetydlig ersättning för att ta aktierisk jämfört med den riskfria räntan.";
+            } else if (erp >= 0.5 && erp < 2.5) {
+                erpEl.className = "text-3xl font-extrabold text-amber-400 mt-1";
+                statusEl.textContent = "Måttlig Risk / Ansträngd";
+                statusEl.className = "text-2xl font-bold text-amber-400 mt-1";
+                descEl.textContent = "Aktier ger viss premie gentemot obligationer, men ligger under det historiska snittet (~3.5%).";
+                evalEl.textContent = "Måttlig riskpremie. Känsligt för ränteuppgångar eller svagare bolagsvinstutveckling.";
+            } else if (erp >= 2.5 && erp < 4.5) {
+                erpEl.className = "text-3xl font-extrabold text-blue-400 mt-1";
+                statusEl.textContent = "Fair Value / Balanserad";
+                statusEl.className = "text-2xl font-bold text-blue-400 mt-1";
+                descEl.textContent = "Hälsosam balans mellan ränta och vinstavkastning. Aktier är rimligt prissatta.";
+                evalEl.textContent = "Normal riskpremie som ger skälig ersättning för aktiemarknadens svängningar.";
+            } else {
+                erpEl.className = "text-3xl font-extrabold text-emerald-400 mt-1";
+                statusEl.textContent = "Attraktiv Värdering / Låg Risk";
+                statusEl.className = "text-2xl font-bold text-emerald-400 mt-1";
+                descEl.textContent = "Börsen erbjuder en mycket stark vinstavkastning jämfört med det riskfria räntealternativet.";
+                evalEl.textContent = "God marginal och hög riskpremie för långsiktiga investerare.";
+            }
+        }
+
+        window.onload = function() {
+            switchMarket('us');
+            updateSimulation();
+        };
+    </script>
+</body>
+</html>
